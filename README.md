@@ -1,0 +1,105 @@
+# LineageOS 16.0 device tree for Huawei MediaPad T5 (AGS2)
+
+## Device identity
+
+| | |
+|---|---|
+| Internal Huawei codename | **Dallas** |
+| SoC / board platform | **hi6250** (HiSilicon Kirin 659) |
+| Retail model codes | AGS2-W09 (WiFi-only), AGS2-L09 / AGS2-AL00 (cellular) |
+| Android version | 9 (Pie), SDK 28 |
+| Treble | enabled, `BOARD_VNDK_VERSION := current` |
+| Screen | 1920x1200 (10.1" FHD), density 480 |
+| Kernel | Linux 4.9.148, `merge_hi6250_defconfig` |
+
+Confirmed directly from a stock HarmonyOS 2.0 (build 102.0.0.040) firmware
+dump: `/hw_odm/AGS2-L09/...` and `ro.product.odm.device=Dallas` in the odm
+partition's `build.prop`. The odm audio config files are internally
+labelled `AGASSI2`/`AGASSI2_normal` — a secondary internal codename
+variant, same hardware.
+
+The firmware used as the extraction source is the **cellular** AGS2-L09/
+AL00 variant (it bundles `MODEM_FW.img`/modem NVM), kept intentionally so
+telephony/modem support isn't stripped from this tree — even though the
+primary target device for this port is the WiFi-only AGS2-W09, keeping
+cellular support lets AGS2-L09/AL00 users run this ROM too.
+
+## Base tree
+
+This is a thin device-specific tree on top of the real, existing
+LineageOS **hi6250-common** tree (shared with other Kirin 659 devices —
+Honor 9 Lite, P smart, Y9 2018, etc.):
+
+- `device/huawei/hi6250-common` — `LineageOS/android_device_huawei_hi6250-common`, branch `lineage-16.0`
+- reference per-device pattern followed: `hi6250-dev/android_device_huawei_figo`, branch `lineage-16.0`
+
+AGS2 did not have an existing device tree in that family (it's a tablet;
+the family is otherwise all phones), which is what this repo adds.
+
+## Kernel
+
+Uses its own kernel tree (`kernel/huawei/AGS2`) rather than sharing
+hi6250-common's, because this exact firmware's GPL kernel release carries
+the correct tablet-specific panel/touch/sensor drivers for AGS2 — imported
+from `Code_Opensource/kernel` in the stock firmware package, Linux
+4.9.148, baseline defconfig `merge_hi6250_defconfig`. Diffing against
+`LineageOS/android_kernel_huawei_hi6250` (lineage-16.0) shows the LOS
+config delta over stock is small and mechanical: `CONFIG_LOCALVERSION`,
+`CONFIG_TCP_NODELAY`, disabling a few Huawei-only features
+(`CONFIG_HW_VOWIFI`, `CONFIG_HUAWEI_HISHOW`), and disabling
+`CONFIG_EROFS_FS` entirely (LOS builds its own system/vendor images as
+plain ext4, it never needs to read Huawei's EROFS at runtime). That same
+delta should be layered onto `merge_hi6250_defconfig` for this tree too —
+not yet done; whoever picks this up next should diff and apply it, then
+do a real `aarch64-linux-android-4.9` (or clang, matching whatever
+toolchain the synced LOS16 manifest brings) build to confirm the kernel
+boots.
+
+## Proprietary blobs
+
+`proprietary-files.txt` was generated from a **static dump** of the stock
+firmware (not a live `adb pull`), covering `/vendor`, `/product`, and
+`/odm` in full. The stock images use EROFS, but it's Huawei's original
+2017-2018 on-disk format (`CONFIG_EROFS_FS_HUAWEI_EXTENSION`) — not
+compatible with current `erofs-utils` or even this machine's own
+(non-Huawei) kernel's `erofs.ko`. A standalone decoder for this exact
+format was written against the GPL kernel source and used to do the
+actual extraction; see `vendor/huawei/AGS2`'s commit message / the
+decoder itself for details if you need to re-extract from a different
+firmware dump. End result: **100% of regular files and symlinks** in
+`/vendor`, `/product`, and `/odm` were recovered and verified (ELF
+headers/dynamic sections/symbol tables and APK zip structure spot-checked
+clean).
+
+`lineage-16.0`'s `extract_utils.sh` (vendor/lineage/build/tools) has no
+native `odm` partition support (that was added in later LineageOS
+branches) — the `odm/`-prefixed lines in `proprietary-files.txt` will
+extract fine via `extract-files.sh`, but `setup-makefiles.sh` won't
+auto-generate an odm Android.mk. Whoever builds this will likely need to
+either hand-write `PRODUCT_COPY_FILES`/packages for the odm blobs, or
+backport `write_odm_packages` from a newer `extract_utils.sh`.
+
+`/system` was also fully extracted for reference/diffing during this
+port but is intentionally **not** in `proprietary-files.txt` — Treble
+means LOS's own system image replaces stock Huawei's entirely; pulling
+stock system blobs would fight that, not help it.
+
+## Known open work
+
+- [ ] Fork `merge_hi6250_defconfig` into an AGS2-specific defconfig with
+      the LOS deltas described above, and confirm a clean kernel build.
+- [ ] Sync a full LineageOS 16.0 source tree, drop this device tree +
+      `kernel/huawei/AGS2` + `vendor/huawei/AGS2` in, and run
+      `extract-files.sh` / `setup-makefiles.sh` for real to generate
+      `vendor/huawei/AGS2/Android.mk` from `proprietary-files.txt`.
+  - For now `extract-files.sh` here just delegates to hi6250-common's
+    script (standard thin-device-tree pattern); it expects to run
+    against a connected device or a firmware zip via `extract_utils.sh`,
+    not against this raw dump directly.
+- [ ] Wire up odm blob packaging (see above).
+- [ ] `breakfast AGS2 && mka bacon`, fix build breakage as it comes up
+      (expect HAL/HIDL mismatches given the stock build's VNDK is
+      reported as 26.0.0 despite being an SDK 28 build — likely stale
+      metadata, but worth double-checking against `BOARD_VNDK_VERSION`).
+- [ ] Flash and test on real hardware — not done in this session (no
+      physical device attached).

@@ -1,0 +1,10 @@
+[
+  {
+    "repository": "android_device_huawei_hi6250-common",
+    "target_path": "device/huawei/hi6250-common"
+  },
+  {
+    "repository": "android_kernel_huawei_AGS2",
+    "target_path": "kernel/huawei/AGS2"
+  }
+]
