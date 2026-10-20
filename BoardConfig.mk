@@ -48,6 +48,15 @@ TARGET_KERNEL_CONFIG := merge_hi6250_defconfig
 # instead, matching the boot chain we're now actually targeting.
 BOARD_BUILD_SYSTEM_ROOT_IMAGE := false
 
+# hi6250-common's shared fstab.hi6250 mounts the system partition at "/"
+# (the system-as-root convention, matching its BOARD_BUILD_SYSTEM_ROOT_
+# IMAGE := true). Now that we're non-SAR, ota_from_target_files'
+# edify_generator.py looks up fstab['/system'] when generating the OTA
+# backup step and hard-fails with "KeyError: '/system'" against the
+# shared fstab -- override with an AGS2-specific copy that mounts
+# system at /system instead.
+TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/etc/fstab.AGS2
+
 # hi6250-common's shared BOARD_KERNEL_CMDLINE is missing two things the
 # real stock cmdline (and a previously-working LineageOS bring-up on a
 # related device) both have:
