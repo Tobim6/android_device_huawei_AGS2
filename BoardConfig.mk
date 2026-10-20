@@ -32,6 +32,24 @@ TARGET_OTA_ASSERT_DEVICE := AGS2,hi6250
 TARGET_KERNEL_SOURCE := kernel/huawei/AGS2
 TARGET_KERNEL_CONFIG := merge_hi6250_defconfig
 
+# This device has no "boot" partition at all -- confirmed from the stock
+# firmware's own partition list, it uses a dedicated "KERNEL" partition
+# instead (updater-script already correctly targets
+# /dev/block/bootdevice/by-name/kernel, inherited from hi6250-common).
+# hi6250-common's shared BOARD_KERNEL_BASE (0x00400000) is a generic
+# default sized for other phones in this family, not this device's real
+# hardware memory map -- confirmed by unpacking the stock KERNEL.img with
+# AIK-Linux: real base is 0x00478000. mkbootimg derives
+# ramdisk_offset/second_offset/tags_offset as a fixed delta from base, so
+# overriding base alone is enough to make our built boot.img exactly
+# match the stock header (verified: the generic-vs-stock delta is a
+# uniform 0x78000 across all three derived offsets).
+BOARD_KERNEL_BASE := 0x00478000
+# ramdisk_offset/second_offset/tags_offset are NOT derived from --base by
+# mkbootimg (verified: changing base alone left them at mkbootimg's own
+# fixed defaults) -- set explicitly to match the stock KERNEL.img header.
+BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x0ff88000 --second_offset 0x00e88000 --tags_offset 0x07988000
+
 # Partitions
 # Sizes below are the raw (post-sparse-expansion) byte sizes measured
 # directly from the stock HarmonyOS 2.0 (build 102.0.0.040) firmware dump
