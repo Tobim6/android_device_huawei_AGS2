@@ -106,6 +106,53 @@ port but is intentionally **not** in `proprietary-files.txt` — Treble
 means LOS's own system image replaces stock Huawei's entirely; pulling
 stock system blobs would fight that, not help it.
 
+## Flashing — this device has no `boot` partition
+
+**Critical, confirmed directly from the stock firmware's own partition
+list (`UPDATE.APP` extraction) — do not flash `boot.img` to a `boot`
+partition on this device, it doesn't exist.** This AGS2/HarmonyOS 2.0
+firmware's GPT has a dedicated **`KERNEL`** partition instead, holding
+just the kernel image with **zero ramdisk** — no separate `RAMDISK`
+partition for normal boot either (only `RECOVERY_RAMDISK.img`/
+`ERECOVERY_RAMDISK.img` exist, for the two recovery modes, and those
+*are* standard combined AOSP bootimgs with a real ramdisk — only
+*normal* boot is ramdiskless).
+
+Investigated and resolved:
+- `KERNEL.img` (from the firmware dump) is a standard AOSP bootimg
+  (`header_version 0`, `ANDROID!` magic) wrapped in ~4096 bytes of
+  leading data — unpacking it with **AIK-Linux**
+  (`maximus-sallam/android-image-kitchen-complete` fork; the upstream
+  `osm0sis/Android-Image-Kitchen` `AIK-Linux` branch's own git history
+  never actually included the compiled Linux binaries it needs) finds
+  the real header automatically and confirms: `BOARD_KERNEL_BASE
+  0x00478000`, page size 2048, and genuinely **no ramdisk** (`Warning:
+  No ramdisk found to be unpacked!`).
+- Turns out this isn't a problem to solve from scratch — **our build
+  was already producing a ramdiskless `boot.img`**, because
+  `device/huawei/hi6250-common/BoardConfigCommon.mk` (the real,
+  upstream hi6250-common tree this device tree is built on) already
+  sets `BOARD_BUILD_SYSTEM_ROOT_IMAGE := true` (system-as-root), which
+  the other phones in this hi6250/Kirin659 family already rely on.
+  AOSP's own `mka bacon` output for this device gives the exact same
+  "no ramdisk" result as the stock `KERNEL.img`. The actual gap was
+  purely the **partition name/packaging**, not the boot mechanism.
+- Fix: unpack the stock `KERNEL.img` with AIK, replace only the
+  embedded kernel payload (`out/target/product/AGS2/kernel` — a plain
+  `Image.gz`, no appended DTB, exactly matching the stock payload
+  format) with ours, and repack — keeping the stock header's
+  hardware-tuned memory offsets (`base`/`kernel_offset`/etc., tuned to
+  this SoC's real DDR map) and empty ramdisk exactly as-is, changing
+  nothing but the kernel binary itself. Output saved at
+  `work/out_flashable/KERNEL.img` (12,288,000 bytes). **Flash this to
+  the `KERNEL` partition specifically, not `boot`** — the exact
+  fastboot/flashing command to use (partition name as this
+  bootloader's `fastboot getvar` sees it) hasn't been verified against
+  real hardware this session.
+- DTB is unaffected by any of this — already handled separately (see
+  Kernel section above): this device uses Huawei's own stock `DTS.img`
+  at flash time, not a from-source DTB.
+
 ## Known hardware limitations
 
 - **No hardware video encode/decode acceleration.** The kernel's
@@ -135,7 +182,7 @@ vendor content:
 | `vendor.img` | 400MB | real `libril.so` (**hash-verified** against the stock blob — not AOSP's generic reference RIL, see below), `libwifi-hal-bcm.so` (real Broadcom WiFi HAL), `camera.device@*-impl.so`, GPU/sensor/audio HAL libs |
 | `product.img` | 426MB | bundled apps, region configs, display/camera effect data |
 | `odm/` staging | 95MB, ~800 files | camera calibration (bshutter/davinci/hwbeauty/smartae configs), 294 per-carrier `.ato` network configs — **not currently packaged into any image, see odm.img caveat above** |
-| `boot.img` | 12MB | |
+| `boot.img` | 12MB | built by `mka bacon`, but **not directly flashable as-is** — see the no-`boot`-partition section above. Repacked into `work/out_flashable/KERNEL.img` for the real `KERNEL` partition instead. |
 | final OTA zip | 759MB | |
 
 **Caught and fixed before calling this done**: an earlier "successful"
@@ -298,6 +345,16 @@ fresh checkout of this same tree:
       `ODM.img` flashed unmodified long-term (current workaround — see
       caveat in Proprietary blobs section above). This is now the main
       remaining gap.
+- [x] **No `boot` partition on this device — confirmed from the stock
+      firmware's own partition list.** Normal boot uses a dedicated
+      `KERNEL` partition with zero ramdisk; `BOARD_BUILD_SYSTEM_ROOT_IMAGE
+      := true` (already inherited from hi6250-common) means our own
+      `mka bacon` output already matches that (ramdiskless `boot.img`)
+      — the only real gap was packaging/partition naming, not the boot
+      mechanism. Repacked via AIK-Linux into `work/out_flashable/
+      KERNEL.img`. **Not yet verified against real hardware** — the
+      correct fastboot partition name/flash command needs confirming
+      before this is actually flashed.
 - [x] `libril`/`rild`/`libwifi-hal{,-bcm}` recovered (real hash-verified
       blobs now packaged, not AOSP's generic reference versions) — see
       Status above.
