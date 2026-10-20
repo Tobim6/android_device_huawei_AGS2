@@ -84,18 +84,50 @@ port but is intentionally **not** in `proprietary-files.txt` — Treble
 means LOS's own system image replaces stock Huawei's entirely; pulling
 stock system blobs would fight that, not help it.
 
+## Known hardware limitations
+
+- **No hardware video encode/decode acceleration.** The kernel's
+  `drivers/vcodec/imagination/D5500/` tree (Imagination/PowerVR D5500
+  video codec IP, gated by `CONFIG_IMAGINATION_D5500_VCODEC` /
+  `_DRM_VCODEC`) is present in the Makefile/Kconfig structure of this GPL
+  release, but `encode/platform/hisi/` is genuinely empty — the
+  IP-encumbered platform glue was not included by Huawei. Build fails
+  with `No rule to make target .../sysdev.o` until these configs are
+  disabled. This is a real functional loss (camera video recording,
+  video calls etc. fall back to software encode/decode), not a build
+  workaround, and there's no source available to fix it short of finding
+  a prebuilt `.ko`/platform blob from another release.
+
+## Status (updated during active build-iteration)
+
+A full LineageOS 16.0 source tree has been synced and this device tree,
+`kernel/huawei/AGS2`, and `vendor/huawei/AGS2` dropped into it;
+`breakfast AGS2` resolves cleanly. Build-iterating via `mka bootimage`
+turned up (and fixed) real issues along the way:
+
+- `device/huawei/hi6250-common/Android.mk` hardcoded a device allowlist
+  (`anne figo`) excluding `AGS2` — added.
+- Host tools (`scripts/dtc` etc.) fail to link on a modern host GCC
+  (`-fno-common` default breaks old bison/flex-generated tentative
+  definitions) — fixed with `-fcommon` in the kernel `Makefile`'s
+  `HOSTCFLAGS`.
+- LOS-matching defconfig deltas applied directly to
+  `arch/arm64/configs/merge_hi6250_defconfig` (not yet split into a
+  separately-named AGS2 defconfig — this file *is* the AGS2 one now):
+  `CONFIG_LOCALVERSION`/`_AUTO`, `CONFIG_TCP_NODELAY`, disabling
+  `CONFIG_DM_SNAPSHOT`, `CONFIG_HW_VOWIFI`, `CONFIG_TYPEC_CAP_CUSTOM_SRC2`,
+  `CONFIG_HUAWEI_HISHOW`, `CONFIG_EROFS_FS`, plus disabling the D5500
+  vcodec configs above.
+
 ## Known open work
 
-- [ ] Fork `merge_hi6250_defconfig` into an AGS2-specific defconfig with
-      the LOS deltas described above, and confirm a clean kernel build.
-- [ ] Sync a full LineageOS 16.0 source tree, drop this device tree +
-      `kernel/huawei/AGS2` + `vendor/huawei/AGS2` in, and run
-      `extract-files.sh` / `setup-makefiles.sh` for real to generate
-      `vendor/huawei/AGS2/Android.mk` from `proprietary-files.txt`.
-  - For now `extract-files.sh` here just delegates to hi6250-common's
-    script (standard thin-device-tree pattern); it expects to run
-    against a connected device or a firmware zip via `extract_utils.sh`,
-    not against this raw dump directly.
+- [ ] Finish getting `mka bootimage` (kernel) to build clean, then move
+      to `mka bacon` for a full ROM build — currently mid-iteration.
+- [ ] Generate `vendor/huawei/AGS2/Android.mk` for real via
+      `extract-files.sh`/`setup-makefiles.sh` from `proprietary-files.txt`
+      (blobs are already in place; the Android.mk was hand-skipped since
+      the blobs came from a static firmware dump, not a live device/zip
+      that `extract_utils.sh` expects as `$SRC`).
 - [ ] Wire up odm blob packaging (see above).
 - [ ] `breakfast AGS2 && mka bacon`, fix build breakage as it comes up
       (expect HAL/HIDL mismatches given the stock build's VNDK is
