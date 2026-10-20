@@ -18,6 +18,7 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/product_launched_with_o.mk)
 
 # call the proprietary setup
 $(call inherit-product-if-exists, vendor/huawei/AGS2/AGS2-vendor.mk)
+$(call inherit-product-if-exists, vendor/huawei/AGS2/AGS2-vendor-odm.mk)
 
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := xhdpi
