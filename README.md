@@ -98,12 +98,33 @@ stock system blobs would fight that, not help it.
   workaround, and there's no source available to fix it short of finding
   a prebuilt `.ko`/platform blob from another release.
 
-## Status (updated during active build-iteration)
+## Status
 
-A full LineageOS 16.0 source tree has been synced and this device tree,
-`kernel/huawei/AGS2`, and `vendor/huawei/AGS2` dropped into it;
-`breakfast AGS2` resolves cleanly. Build-iterating via `mka bootimage`
-turned up (and fixed) real issues along the way:
+**`mka bacon` succeeds end-to-end** — a full `lineage-16.0-*-AGS2.zip` OTA
+package builds cleanly, with `boot.img`/`recovery.img`/`vendor.img`/
+`product.img` all produced, fingerprint
+`HUAWEI/lineage_AGS2/AGS2:9/.../userdebug/test-keys`. A full LineageOS
+16.0 source tree synced, this device tree + `kernel/huawei/AGS2` +
+`vendor/huawei/AGS2` dropped in, `breakfast AGS2` resolves cleanly.
+
+**Important caveat — this build does not yet include the real hardware
+blobs.** `vendor/huawei/AGS2/proprietary/` has the full ~1.2GB of
+genuinely extracted stock blobs (RIL, camera, audio, sensors, GPU
+userspace libs — see below), but there is no
+`vendor/huawei/AGS2/AGS2-vendor.mk` (or Android.mk) wiring them into
+`PRODUCT_PACKAGES`/`PRODUCT_COPY_FILES` yet — `device.mk`'s
+`inherit-product-if-exists` for it silently no-ops since the file
+doesn't exist. The build that just succeeded is running on **generic
+AOSP/Treble reference vendor implementation only**: it proves the
+kernel + device tree + build pipeline genuinely coheres, but the
+resulting image has no real WiFi/modem/camera/sensor/GPU support yet.
+**Generating that vendor makefile from `proprietary-files.txt` is the
+single most important remaining step** before this is a ROM worth
+flashing.
+
+Build-iteration also turned up (and fixed) several environment/build
+issues along the way — kept here since they'll very likely recur on a
+fresh checkout of this same tree:
 
 - `device/huawei/hi6250-common/Android.mk` hardcoded a device allowlist
   (`anne figo`) excluding `AGS2` — added.
@@ -111,6 +132,25 @@ turned up (and fixed) real issues along the way:
   (`-fno-common` default breaks old bison/flex-generated tentative
   definitions) — fixed with `-fcommon` in the kernel `Makefile`'s
   `HOSTCFLAGS`.
+- LOS16-era build scripts are Python 2; a modern host only has Python 3.
+  Fix: a PATH-prepended shim directory with `python`/`python2`/
+  `python2.7` symlinked to the genuinely-functional Python 2.7 already
+  bundled at `prebuilts/gdb/linux-x86/bin/python2.7` (meant for gdb, but
+  works standalone) — export that dir first in PATH before sourcing
+  `envsetup.sh`.
+- `external/chromium-webview`'s prebuilt `webview.apk` (all 4 ABIs)
+  ships as a Git LFS pointer; plain `repo sync` doesn't fetch LFS
+  content. Fix: `git-lfs install --local` then `git lfs pull` run with
+  explicit `GIT_DIR=.repo/projects/external/chromium-webview/prebuilt/<arch>.git`
+  / `GIT_WORK_TREE=external/chromium-webview/prebuilt/<arch>` per ABI
+  (repo-tool checkouts don't have a normal top-level `.git`).
+- Killing/restarting a build mid-flight can leave stale, incomplete
+  intermediates in `out/` (a `classes-header.jar` or similar that's a
+  few bytes of garbage, not real content) that cause confusing,
+  unrelated-looking downstream failures. If a failure mentions a class
+  that obviously exists in source, check the actual intermediate
+  file's size before chasing the wrong lead; `rm -rf` just that
+  module's `*_intermediates` directory, don't do a full clean.
 - LOS-matching defconfig deltas applied directly to
   `arch/arm64/configs/merge_hi6250_defconfig` (not yet split into a
   separately-named AGS2 defconfig — this file *is* the AGS2 one now):
@@ -118,20 +158,22 @@ turned up (and fixed) real issues along the way:
   `CONFIG_DM_SNAPSHOT`, `CONFIG_HW_VOWIFI`, `CONFIG_TYPEC_CAP_CUSTOM_SRC2`,
   `CONFIG_HUAWEI_HISHOW`, `CONFIG_EROFS_FS`, plus disabling the D5500
   vcodec configs above.
+- `hi6250-common`'s QTI/Qualcomm IMS telephony jar
+  (`TARGET_PROVIDES_QTI_TELEPHONY_JAR`, `qti-telephony-common`,
+  `telephony-ext`) is irrelevant boilerplate for this device's Huawei
+  Balong modem — removed as cleanup (the actual `ims-ext-common`
+  compile errors hit along the way turned out to be the stale-
+  intermediates issue above, not this, but it's dead weight either way).
 
 ## Known open work
 
-- [ ] Finish getting `mka bootimage` (kernel) to build clean, then move
-      to `mka bacon` for a full ROM build — currently mid-iteration.
-- [ ] Generate `vendor/huawei/AGS2/Android.mk` for real via
-      `extract-files.sh`/`setup-makefiles.sh` from `proprietary-files.txt`
-      (blobs are already in place; the Android.mk was hand-skipped since
-      the blobs came from a static firmware dump, not a live device/zip
-      that `extract_utils.sh` expects as `$SRC`).
-- [ ] Wire up odm blob packaging (see above).
-- [ ] `breakfast AGS2 && mka bacon`, fix build breakage as it comes up
-      (expect HAL/HIDL mismatches given the stock build's VNDK is
-      reported as 26.0.0 despite being an SDK 28 build — likely stale
-      metadata, but worth double-checking against `BOARD_VNDK_VERSION`).
+- [ ] **Generate `vendor/huawei/AGS2/AGS2-vendor.mk`/Android.mk from
+      `proprietary-files.txt`** and get the real extracted blobs
+      actually packaged into `vendor.img`/`product.img` — see caveat
+      above. This is the main remaining task.
+- [ ] Wire up odm blob packaging (`extract_utils.sh` in this LOS
+      version has no native odm support — see earlier note).
+- [ ] Double-check `BOARD_VNDK_VERSION := current` resolves sanely given
+      the stock build's VNDK metadata said 26.0.0 despite being SDK 28.
 - [ ] Flash and test on real hardware — not done in this session (no
       physical device attached).
