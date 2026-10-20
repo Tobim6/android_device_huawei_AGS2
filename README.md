@@ -73,11 +73,33 @@ clean).
 
 `lineage-16.0`'s `extract_utils.sh` (vendor/lineage/build/tools) has no
 native `odm` partition support (that was added in later LineageOS
-branches) — the `odm/`-prefixed lines in `proprietary-files.txt` will
-extract fine via `extract-files.sh`, but `setup-makefiles.sh` won't
-auto-generate an odm Android.mk. Whoever builds this will likely need to
-either hand-write `PRODUCT_COPY_FILES`/packages for the odm blobs, or
-backport `write_odm_packages` from a newer `extract_utils.sh`.
+branches) — the `odm/`-prefixed lines in `proprietary-files.txt` extract
+fine via `extract-files.sh`, but `setup-makefiles.sh` won't auto-generate
+an odm Android.mk. **Resolved**: `vendor/huawei/AGS2/AGS2-vendor-odm.mk`
+is hand-generated (`work/tools/gen_odm_mk.py`) as a plain
+`PRODUCT_COPY_FILES` block into `$(TARGET_COPY_OUT_ODM)`.
+
+**However**: this specific AOSP-9/LineageOS-16.0 `build/make` core has no
+`odm.img` build rule at all — not just no `extract_utils.sh` support, the
+whole image-packaging step for a separate ODM partition doesn't exist
+yet in this AOSP vintage (full ODM-partition image building landed in
+later AOSP). `TARGET_COPY_OUT_ODM := odm` plus
+`BOARD_ODMIMAGE_PARTITION_SIZE`/`_FILE_SYSTEM_TYPE` in
+`device/huawei/AGS2/BoardConfig.mk` stage real content into
+`out/target/product/AGS2/odm/` (confirmed: camera calibration data,
+per-carrier `.ato` network configs, etc. — ~800 files after dropping
+broken symlinks, see below), but nothing ever turns that staging
+directory into `odm.img` or bundles it into the OTA zip. **Workaround**:
+flash the stock HarmonyOS `ODM.img` (Android sparse image,
+`/home/tobim6/Downloads/AGS2 HMOS/ODM.img` in the original firmware
+dump) unmodified to the `odm` partition alongside this ROM's
+`boot`/`vendor`/`product`/`system`. It's literally the same data our
+`proprietary-files.txt` was extracted from, and since it's flashed to
+its own real, separately-mounted partition, the on-device-absolute-path
+symlinks inside it (`/odm/hw_odm/ncfg/...` etc. — see below) resolve
+correctly there, unlike in our static extraction tree. Porting real
+`odm.img` build support from a later AOSP revision is tracked as open
+work below but not attempted this session.
 
 `/system` was also fully extracted for reference/diffing during this
 port but is intentionally **not** in `proprietary-files.txt` — Treble
@@ -100,27 +122,126 @@ stock system blobs would fight that, not help it.
 
 ## Status
 
-**`mka bacon` succeeds end-to-end** — a full `lineage-16.0-*-AGS2.zip` OTA
-package builds cleanly, with `boot.img`/`recovery.img`/`vendor.img`/
-`product.img` all produced, fingerprint
-`HUAWEI/lineage_AGS2/AGS2:9/.../userdebug/test-keys`. A full LineageOS
-16.0 source tree synced, this device tree + `kernel/huawei/AGS2` +
-`vendor/huawei/AGS2` dropped in, `breakfast AGS2` resolves cleanly.
+**`mka bacon` succeeds end-to-end with the real hardware blobs actually
+packaged, including the real (hash-verified) RIL and WiFi HAL blobs.**
+A full `lineage-16.0-20261020-UNOFFICIAL-AGS2.zip` OTA package (759MB)
+builds cleanly, fingerprint `HUAWEI/lineage_AGS2/AGS2:9/.../userdebug/
+test-keys`. This is a real milestone over an earlier "successful" build
+that silently excluded all
+vendor content:
 
-**Important caveat — this build does not yet include the real hardware
-blobs.** `vendor/huawei/AGS2/proprietary/` has the full ~1.2GB of
-genuinely extracted stock blobs (RIL, camera, audio, sensors, GPU
-userspace libs — see below), but there is no
-`vendor/huawei/AGS2/AGS2-vendor.mk` (or Android.mk) wiring them into
-`PRODUCT_PACKAGES`/`PRODUCT_COPY_FILES` yet — `device.mk`'s
-`inherit-product-if-exists` for it silently no-ops since the file
-doesn't exist. The build that just succeeded is running on **generic
-AOSP/Treble reference vendor implementation only**: it proves the
-kernel + device tree + build pipeline genuinely coheres, but the
-resulting image has no real WiFi/modem/camera/sensor/GPU support yet.
-**Generating that vendor makefile from `proprietary-files.txt` is the
-single most important remaining step** before this is a ROM worth
-flashing.
+| image | size | contents |
+|---|---|---|
+| `vendor.img` | 400MB | real `libril.so` (**hash-verified** against the stock blob — not AOSP's generic reference RIL, see below), `libwifi-hal-bcm.so` (real Broadcom WiFi HAL), `camera.device@*-impl.so`, GPU/sensor/audio HAL libs |
+| `product.img` | 426MB | bundled apps, region configs, display/camera effect data |
+| `odm/` staging | 95MB, ~800 files | camera calibration (bshutter/davinci/hwbeauty/smartae configs), 294 per-carrier `.ato` network configs — **not currently packaged into any image, see odm.img caveat above** |
+| `boot.img` | 12MB | |
+| final OTA zip | 759MB | |
+
+**Caught and fixed before calling this done**: an earlier "successful"
+build was actually shipping AOSP's *generic reference* `libril.so` in
+vendor.img, not Huawei's real Balong-modem one — same module name, so
+the collision-avoidance logic below had quietly dropped ours and let
+AOSP's win (different file size/hash, confirmed by hashing both).
+Telephony was an explicit project goal (cellular firmware was
+deliberately the extraction source precisely so LTE variant users
+aren't left out), so this got a real fix rather than a documented
+caveat:
+
+- `hardware/ril/libril` and `hardware/ril/rild` both check an opt-out
+  flag before defining their own generic module
+  (`BOARD_PROVIDES_LIBRIL` / `ENABLE_VENDOR_RIL_SERVICE`, set in
+  `device/huawei/AGS2/BoardConfig.mk`) — exactly for this situation.
+  `libreference-ril`/`librilutils` have no such guard and are
+  unconditionally pulled into every product by
+  `build/target/product/base.mk`, so those two genuinely can't be
+  overridden and stay dropped (no functional loss believed —
+  `librilutils` is generic IPC glue, and the generic
+  `libreference-ril` is simulator-oriented and inert once Huawei's
+  real `libril`/`rild` are doing the work).
+- `libwifi-hal`/`libwifi-hal-bcm` (the real Broadcom WiFi HAL) were
+  dropped on the same false assumption — neither `hi6250-common` nor
+  this device tree ever actually selects AOSP's same-named module into
+  `PRODUCT_PACKAGES`, so demoting to a plain copy-file avoids the
+  `ckati` parse-time name collision with no risk of a competing ninja
+  install rule for the same output path.
+- Un-dropping `libril` then exposed a **second**, much more systemic
+  bug: this LineageOS 16.0 `extract_utils.sh` never sets
+  `LOCAL_PROPRIETARY_MODULE`/`LOCAL_PRODUCT_MODULE` on any
+  `SHARED_LIBRARIES`-class `BUILD_PREBUILT` stanza it generates (the
+  vendor-placement override is literally commented out in that
+  script's `write_packages()`) — all ~256 of our vendor/product `.so`
+  modules were implicitly tagged `native:platform` instead of
+  `native:vendor`/`native:product`. Unnoticed for 27 build iterations
+  because nothing had an explicit dependency on any of them that would
+  trigger `build/make`'s Treble `check_link_type.py` consistency
+  check — until `libreference-ril`'s dependency on `libril` did:
+  `libreference-ril (native:vendor) should not link to libril
+  (native:platform)`. Fixed generically (not just for `libril`) with a
+  post-processing pass over the generated `Android.mk`
+  (`work/tools/fix_prebuilt_partition_flags.py`, wired into
+  `gen_vendor_makefiles.sh`) that tags every `SHARED_LIBRARIES` stanza
+  with the correct partition flag based on its source path.
+
+`vendor/huawei/AGS2/AGS2-vendor.mk` + `Android.mk` +
+`BoardConfigVendor.mk` + `AGS2-vendor-odm.mk` are generated from
+`proprietary-files.txt` via a categorizer script
+(`work/tools/split_proprietary_files.py`) feeding LineageOS's own
+`extract_utils.sh`, rather than hand-written. Getting from "generic
+AOSP vendor, builds but no hardware support" to this took ~20 build
+iterations, each one `extract_utils.sh` (designed for live-device
+extraction, not a comprehensive static dump of ~6,000 files) hitting a
+different implicit convention or edge case:
+
+- HIDL (`*@X.Y-impl*.so`) and legacy (`lib{,64}/hw/*.so`) HAL
+  implementation libraries must stay plain copy-files, never named
+  `PRODUCT_PACKAGES` modules — they collide with AOSP's own default HAL
+  module of the same name at `ckati` parse time.
+- ~71 module names (sepolicy/toybox/init/vndservice infra, mostly —
+  plus a few genuinely hardware-specific losses: `libreference-ril`,
+  `librilutils`, some audio effect libs) collide with an AOSP/LOS
+  module elsewhere in the tree and have no build-flag opt-out, so stay
+  dropped; excluded by diffing our full module list against every
+  `LOCAL_MODULE`/`Android.bp` name in the synced source tree.
+  `libril`/`rild`/`libwifi-hal{,-bcm}` were in this category too until
+  properly recovered — see the RIL/WiFi section below.
+- ~300 basenames (camera calibration configs, regional carrier files,
+  generic lib/bin names like `custom`) collide with each other across
+  different source paths — `write_packages` names modules by bare
+  basename with no path disambiguation; demoted to copy-files.
+- 53 `.apk`/`.jar` files (per-SKU regional overlays, China-only service
+  apps) live at paths `write_product_packages` doesn't recognize as an
+  app category (`overlay/`, `region_comm/.../app/NAME/`, etc.) and can't
+  go through plain `PRODUCT_COPY_FILES` either (`use BUILD_PREBUILT
+  instead!`) — dropped entirely.
+- 1170 symlinks under `odm/` use on-device-absolute-path targets
+  (`/odm/hw_odm/...`, `/vendor/preavs/...`, `/system/lib/...`) — valid
+  once partitions are mounted at runtime, unresolvable in our offline
+  extraction tree. Every case checked has its real content packaged
+  separately under a real (non-symlink) path; dropped with no loss.
+- 79 files have a `.xml` extension but are genuinely binary content —
+  74 are real XML mislabeled with the unsupported legacy `GB2312`
+  encoding (re-encoded to UTF-8 with `iconv`, content unchanged), 5 are
+  actually binary/encrypted Huawei "cust" policy blobs (`file`/`xxd`
+  confirmed high-entropy bytes from byte 0, not real XML at all —
+  dropped; the categorizer now runs `xmllint` on every `.xml` entry at
+  categorization time so this is caught automatically on any future
+  re-extraction).
+- 2 `.hap` (HarmonyOS "Feature Ability" package, not an Android APK)
+  files sitting in the same `app/` dir as a real `.apk` got treated as
+  a packageable APK module and sent through `signapk`, which crashed
+  (`No AndroidManifest.xml in APK`) — dropped; the real `.apk` in the
+  same directory is still packaged.
+- A stray `readme.txt` bundled inside a vendor SDK's `lib64/` directory
+  got module-ified as a `SHARED_LIBRARIES` target and sent through
+  `strip`, which hard-fails on non-ELF input — any `lib`/`lib64`-
+  category entry now requires an actual `.so` extension to get module
+  treatment.
+
+All of this lives in `work/tools/split_proprietary_files.py`'s
+exclusion logic, so re-running the full pipeline against a fresh
+extraction (e.g. a newer firmware dump) should reproduce a working
+build without re-discovering each of these by hand.
 
 Build-iteration also turned up (and fixed) several environment/build
 issues along the way — kept here since they'll very likely recur on a
@@ -167,13 +288,26 @@ fresh checkout of this same tree:
 
 ## Known open work
 
-- [ ] **Generate `vendor/huawei/AGS2/AGS2-vendor.mk`/Android.mk from
-      `proprietary-files.txt`** and get the real extracted blobs
-      actually packaged into `vendor.img`/`product.img` — see caveat
-      above. This is the main remaining task.
-- [ ] Wire up odm blob packaging (`extract_utils.sh` in this LOS
-      version has no native odm support — see earlier note).
+- [x] Generate `vendor/huawei/AGS2/AGS2-vendor.mk`/`Android.mk` from
+      `proprietary-files.txt` and get the real extracted blobs actually
+      packaged into `vendor.img`/`product.img` — done, see Status above.
+- [x] Wire up odm blob packaging as `PRODUCT_COPY_FILES` (hand-written,
+      `extract_utils.sh` in this LOS version has no native odm support).
+- [ ] **Port real `odm.img` build support** from a later AOSP revision,
+      or confirm whether this device can run acceptably with the stock
+      `ODM.img` flashed unmodified long-term (current workaround — see
+      caveat in Proprietary blobs section above). This is now the main
+      remaining gap.
+- [x] `libril`/`rild`/`libwifi-hal{,-bcm}` recovered (real hash-verified
+      blobs now packaged, not AOSP's generic reference versions) — see
+      Status above.
+- [ ] A few remaining genuinely hardware-specific modules stay dropped
+      because their AOSP/LOS collision has no build-flag opt-out
+      (`libreference-ril`, `librilutils`, some audio effect libs) —
+      believed to be no real functional loss (see Status above for the
+      reasoning on each), but not verified on real hardware.
 - [ ] Double-check `BOARD_VNDK_VERSION := current` resolves sanely given
       the stock build's VNDK metadata said 26.0.0 despite being SDK 28.
 - [ ] Flash and test on real hardware — not done in this session (no
-      physical device attached).
+      physical device attached). This is explicitly the user's own
+      next step.
