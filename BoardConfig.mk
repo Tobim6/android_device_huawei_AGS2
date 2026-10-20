@@ -19,7 +19,7 @@
 DEVICE_PATH := device/huawei/AGS2
 
 # Assert
-TARGET_OTA_ASSERT_DEVICE := AGS2,hi6250
+TARGET_OTA_ASSERT_DEVICE := AGS2,hi6250,agassi2,anne,prague
 
 # Kernel
 # AGS2 has its own GPL kernel release (from the stock HarmonyOS 2.0 firmware)
