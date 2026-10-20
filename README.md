@@ -137,21 +137,37 @@ Investigated and resolved:
   AOSP's own `mka bacon` output for this device gives the exact same
   "no ramdisk" result as the stock `KERNEL.img`. The actual gap was
   purely the **partition name/packaging**, not the boot mechanism.
-- Fix: unpack the stock `KERNEL.img` with AIK, replace only the
-  embedded kernel payload (`out/target/product/AGS2/kernel` — a plain
-  `Image.gz`, no appended DTB, exactly matching the stock payload
-  format) with ours, and repack — keeping the stock header's
-  hardware-tuned memory offsets (`base`/`kernel_offset`/etc., tuned to
-  this SoC's real DDR map) and empty ramdisk exactly as-is, changing
-  nothing but the kernel binary itself. Output saved at
-  `work/out_flashable/KERNEL.img` (12,288,000 bytes). **Flash this to
-  the `KERNEL` partition specifically, not `boot`** — the exact
-  fastboot/flashing command to use (partition name as this
-  bootloader's `fastboot getvar` sees it) hasn't been verified against
-  real hardware this session.
+- First fix attempt (superseded, see below): unpacked the stock
+  `KERNEL.img` with AIK, replaced only the embedded kernel payload
+  (`out/target/product/AGS2/kernel` — a plain `Image.gz`, no appended
+  DTB, exactly matching the stock payload format) with ours, and
+  repacked — keeping the stock header's hardware-tuned memory offsets
+  and empty ramdisk as-is, changing nothing but the kernel binary.
+  This worked, but meant a manual post-build repack step every time.
+- **Permanent fix, now automatic on every `mka bacon`**: the real root
+  cause was that `device/huawei/hi6250-common/BoardConfigCommon.mk`'s
+  `BOARD_KERNEL_BASE` (`0x00400000`) is a generic default sized for
+  other phones in this SoC family, not this device's real memory map —
+  and `mkbootimg` does **not** derive `ramdisk_offset`/`second_offset`/
+  `tags_offset` from `--base` (verified: changing base alone left them
+  unchanged at mkbootimg's own built-in defaults). `device_huawei_AGS2/
+  BoardConfig.mk` now overrides all four explicitly
+  (`BOARD_KERNEL_BASE` + `BOARD_MKBOOTIMG_ARGS` with
+  `--kernel_offset`/`--ramdisk_offset`/`--second_offset`/
+  `--tags_offset`) to match the stock `KERNEL.img` header exactly —
+  confirmed byte-for-byte identical via AIK-Linux unpack of our own
+  rebuilt `boot.img`. **No post-build repacking needed anymore** — `mka
+  bacon`'s own `boot.img` output (and therefore the OTA zip's embedded
+  copy) is already correct. `updater-script` already correctly flashes
+  it to `/dev/block/bootdevice/by-name/kernel` (not `boot`), inherited
+  from hi6250-common — confirmed by inspecting the built OTA zip.
 - DTB is unaffected by any of this — already handled separately (see
   Kernel section above): this device uses Huawei's own stock `DTS.img`
   at flash time, not a from-source DTB.
+- Still **not verified against real hardware** this session — the
+  OTA zip (with the fix applied, re-signed with the build's own test
+  keys) is ready to test at `work/out_flashable/
+  lineage-16.0-20261020-UNOFFICIAL-AGS2-kernelfix.zip`.
 
 ## Known hardware limitations
 
@@ -349,12 +365,14 @@ fresh checkout of this same tree:
       firmware's own partition list.** Normal boot uses a dedicated
       `KERNEL` partition with zero ramdisk; `BOARD_BUILD_SYSTEM_ROOT_IMAGE
       := true` (already inherited from hi6250-common) means our own
-      `mka bacon` output already matches that (ramdiskless `boot.img`)
-      — the only real gap was packaging/partition naming, not the boot
-      mechanism. Repacked via AIK-Linux into `work/out_flashable/
-      KERNEL.img`. **Not yet verified against real hardware** — the
-      correct fastboot partition name/flash command needs confirming
-      before this is actually flashed.
+      `mka bacon` output already matches that (ramdiskless `boot.img`).
+      `BoardConfig.mk` now also sets the correct hardware-tuned
+      `BOARD_KERNEL_BASE`/offsets so `mka bacon`'s native `boot.img`
+      matches the stock header exactly — **no manual repack step
+      needed anymore, this is fixed at the source and automatic on
+      every build.** `updater-script` already correctly flashes it to
+      `by-name/kernel`. **Still not verified against real hardware** —
+      nothing has actually been flashed yet.
 - [x] `libril`/`rild`/`libwifi-hal{,-bcm}` recovered (real hash-verified
       blobs now packaged, not AOSP's generic reference versions) — see
       Status above.
