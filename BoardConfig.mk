@@ -46,3 +46,15 @@ BOARD_PRODUCTIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
 TARGET_COPY_OUT_PRODUCT := product
 TARGET_COPY_OUT_ODM := odm
+
+# RIL
+# This device has its own Huawei/Balong-modem libril.so and bin/hw/rild
+# (extracted into vendor/huawei/AGS2/proprietary) -- without these,
+# AOSP's generic hardware/ril/{libril,rild} reference implementations
+# would win the module-name collision, which don't speak to this modem
+# at all (confirmed: different size/hash from the real Huawei blobs).
+# Both AOSP modules check for exactly this opt-out before defining
+# themselves, so this lets our real prebuilts be the sole "libril"/
+# "rild" module instead of dropping them.
+BOARD_PROVIDES_LIBRIL := true
+ENABLE_VENDOR_RIL_SERVICE := true
