@@ -39,15 +39,13 @@ TARGET_KERNEL_CONFIG := merge_hi6250_defconfig
 # hi6250-common's shared BOARD_KERNEL_BASE (0x00400000) is a generic
 # default sized for other phones in this family, not this device's real
 # hardware memory map -- confirmed by unpacking the stock KERNEL.img with
-# AIK-Linux: real base is 0x00478000. mkbootimg derives
-# ramdisk_offset/second_offset/tags_offset as a fixed delta from base, so
-# overriding base alone is enough to make our built boot.img exactly
-# match the stock header (verified: the generic-vs-stock delta is a
-# uniform 0x78000 across all three derived offsets).
+# AIK-Linux: real base is 0x00478000, with ramdisk_offset/second_offset/
+# tags_offset also differing from mkbootimg's own built-in defaults.
+# mkbootimg does NOT derive those three from --base (verified: changing
+# base alone left them unchanged) -- all four are set explicitly below
+# to match the stock header exactly (byte-for-byte field comparison via
+# AIK-Linux unpack of our own built boot.img, confirmed).
 BOARD_KERNEL_BASE := 0x00478000
-# ramdisk_offset/second_offset/tags_offset are NOT derived from --base by
-# mkbootimg (verified: changing base alone left them at mkbootimg's own
-# fixed defaults) -- set explicitly to match the stock KERNEL.img header.
 BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x0ff88000 --second_offset 0x00e88000 --tags_offset 0x07988000
 
 # Partitions
