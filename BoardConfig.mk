@@ -22,31 +22,67 @@ DEVICE_PATH := device/huawei/AGS2
 TARGET_OTA_ASSERT_DEVICE := AGS2,hi6250,agassi2,anne,prague
 
 # Kernel
-# AGS2 has its own GPL kernel release (from the stock HarmonyOS 2.0 firmware)
-# rather than sharing hi6250-common's phone-oriented kernel tree, since it
-# carries the tablet-specific panel/touch/sensor drivers for this device.
-# Baseline defconfig is stock Huawei's merge_hi6250_defconfig; expect to fork
-# this into an AGS2-specific defconfig once Treble/selinux/f2fs-crypto
-# deltas (see device/huawei/hi6250-common's kernel for reference) are
-# layered on top.
+# AGS2 has its own GPL kernel release rather than sharing hi6250-common's
+# phone-oriented kernel tree, since it carries the tablet-specific panel/
+# touch/sensor drivers for this device. Source is now EMUI8 (Linux
+# 4.4.23), not the originally-extracted HarmonyOS 2.0 one (4.9.148) --
+# real hardware testing showed HarmonyOS 2.0's bootloader chain
+# (XLOADER/FASTBOOT/TEEOS/TRUSTFIRMWARE) AVB-enforces the kernel
+# partition against a key we don't have, with no software workaround
+# found (see kernel_huawei_AGS2 commit "Switch kernel base..." for the
+# full investigation). The user has real, prior, firsthand success
+# getting a custom kernel booting on this exact device's EMUI8-era
+# firmware, so the whole boot chain target is now EMUI8, not just the
+# kernel. Baseline defconfig is stock Huawei's merge_hi6250_defconfig
+# (present in both generations' source, confirmed compatible).
 TARGET_KERNEL_SOURCE := kernel/huawei/AGS2
 TARGET_KERNEL_CONFIG := merge_hi6250_defconfig
 
+# EMUI8 uses the traditional ramdisk-based boot convention (confirmed by
+# unpacking the stock EMUI8 RAMDISK.img: a real, populated gzip cpio
+# ramdisk with /init, /init.rc, fstab.zram* variants etc, paired at boot
+# time with the separate, ramdisk-less "kernel" partition) -- NOT the
+# ramdisk-less system-as-root scheme HarmonyOS 2.0/EMUI9 use, which is
+# what hi6250-common's BOARD_BUILD_SYSTEM_ROOT_IMAGE := true assumes.
+# Overriding to false so the build produces and expects a real ramdisk
+# instead, matching the boot chain we're now actually targeting.
+BOARD_BUILD_SYSTEM_ROOT_IMAGE := false
+
+# hi6250-common's shared BOARD_KERNEL_CMDLINE is missing two things the
+# real stock cmdline (and a previously-working LineageOS bring-up on a
+# related device) both have:
+#   - coherent_pool=512K / slub_min_objects=12 -- memory tuning params
+#     present in the stock KERNEL.img cmdline for this exact device.
+#   - androidboot.selinux=permissive -- without this, SELinux defaults
+#     to enforcing; this device tree's sepolicy is almost certainly
+#     incomplete for all the proprietary HALs/services pulled in from
+#     the stock vendor blobs, and an early SELinux denial killing a
+#     critical process can hang boot completely silently (no visible
+#     output at all, since nothing gets far enough to redraw the
+#     screen past the bootloader's last frame) -- a well-known class of
+#     custom-ROM bring-up failure, not something dmesg/pstore catches.
+BOARD_KERNEL_CMDLINE := loglevel=4 coherent_pool=512K page_tracker=on slub_min_objects=12 unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538 androidboot.selinux=permissive
+
 # This device has no "boot" partition at all -- confirmed from the stock
 # firmware's own partition list, it uses a dedicated "KERNEL" partition
-# instead (updater-script already correctly targets
-# /dev/block/bootdevice/by-name/kernel, inherited from hi6250-common).
+# for the kernel (updater-script already correctly targets
+# /dev/block/bootdevice/by-name/kernel, inherited from hi6250-common)
+# plus a separate "ramdisk" partition for EMUI8's real, populated
+# ramdisk (see BOARD_BUILD_SYSTEM_ROOT_IMAGE note above).
 # hi6250-common's shared BOARD_KERNEL_BASE (0x00400000) is a generic
 # default sized for other phones in this family, not this device's real
-# hardware memory map -- confirmed by unpacking the stock KERNEL.img with
-# AIK-Linux: real base is 0x00478000, with ramdisk_offset/second_offset/
-# tags_offset also differing from mkbootimg's own built-in defaults.
-# mkbootimg does NOT derive those three from --base (verified: changing
-# base alone left them unchanged) -- all four are set explicitly below
-# to match the stock header exactly (byte-for-byte field comparison via
-# AIK-Linux unpack of our own built boot.img, confirmed).
+# hardware memory map -- confirmed by unpacking the stock EMUI8
+# KERNEL.img with AIK-Linux: real base is 0x00478000, with
+# ramdisk_offset/second_offset/tags_offset also differing from
+# mkbootimg's own built-in defaults. mkbootimg does NOT derive those
+# three from --base (verified: changing base alone left them
+# unchanged) -- all four set explicitly below to match the stock
+# EMUI8 header exactly (ramdisk_offset is EMUI8-specific -- 0x07b88000,
+# not the 0x0ff88000 value HarmonyOS 2.0/EMUI9 use -- confirmed by
+# byte-for-byte field comparison via AIK-Linux unpack of the real
+# stock EMUI8 KERNEL.img).
 BOARD_KERNEL_BASE := 0x00478000
-BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x0ff88000 --second_offset 0x00e88000 --tags_offset 0x07988000
+BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x07b88000 --second_offset 0x00e88000 --tags_offset 0x07988000
 
 # Partitions
 # Sizes below are the raw (post-sparse-expansion) byte sizes measured
