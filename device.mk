@@ -39,5 +39,23 @@ PRODUCT_CHARACTERISTICS := tablet
 TARGET_SCREEN_HEIGHT := 1200
 TARGET_SCREEN_WIDTH := 1920
 
+# The EMUI8-generation Mali GPU driver blob (swapped in to match our EMUI8
+# kernel) needs android::CallStack, which this AOSP tree split out of
+# libutils.so into a separate libutilscallstack.so -- and libutils.so isn't
+# an LLNDK library the sphal namespace can reach from the system partition
+# either way. See device/huawei/AGS2/libutils_vendor_compat/Android.bp for
+# the full explanation; this installs a vendor-local libutils.so that
+# re-exports CallStack alongside the normal libutils API.
+PRODUCT_PACKAGES += \
+    libutils_vendor_callstack_compat_as_libutils_64 \
+    libutils_vendor_callstack_compat_as_libutils_32
+
 # Inherit from hi6250-common
 $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
+
+# TEEOS native-CA whitelist + keys that stock EMUI8 ships in the ramdisk. teecd pushes
+# /res/native_packages.xml (alongside /system/etc and /vendor/etc copies) to TEEOS via
+# TC_NS_set_nativeCA_hash; without all lists TEEOS rejects TA sessions.
+PRODUCT_COPY_FILES += \
+    device/huawei/AGS2/rootdir/res/native_packages.xml:root/res/native_packages.xml \
+    device/huawei/AGS2/rootdir/res/keys:root/res/keys
