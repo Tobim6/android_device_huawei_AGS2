@@ -56,6 +56,7 @@ $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
 # TEEOS native-CA whitelist + keys that stock EMUI8 ships in the ramdisk. teecd pushes
 # /res/native_packages.xml (alongside /system/etc and /vendor/etc copies) to TEEOS via
 # TC_NS_set_nativeCA_hash; without all lists TEEOS rejects TA sessions.
+# (native_packages.xml is a binary blob, so it is installed by a plain cp rule in Android.mk: PRODUCT_COPY_FILES
+# would run xmllint on it because of the .xml extension and fail the build)
 PRODUCT_COPY_FILES += \
-    device/huawei/AGS2/rootdir/res/native_packages.xml:root/res/native_packages.xml \
     device/huawei/AGS2/rootdir/res/keys:root/res/keys

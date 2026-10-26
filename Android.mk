@@ -22,5 +22,12 @@
 LOCAL_PATH := $(call my-dir)
 
 ifeq ($(TARGET_DEVICE),AGS2)
+# Binary TEEOS whitelist for the ramdisk (/res/native_packages.xml); see device.mk
+AGS2_NATIVE_PACKAGES := $(PRODUCT_OUT)/root/res/native_packages.xml
+$(AGS2_NATIVE_PACKAGES): $(LOCAL_PATH)/rootdir/res/native_packages.xml
+	@mkdir -p $(dir $@)
+	$(hide) cp -f $< $@
+ALL_DEFAULT_INSTALLED_MODULES += $(AGS2_NATIVE_PACKAGES)
+
 include $(call all-makefiles-under,$(LOCAL_PATH))
 endif
