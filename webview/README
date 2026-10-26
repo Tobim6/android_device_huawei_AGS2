@@ -1,0 +1,6 @@
+external/chromium-webview/prebuilt/arm64/webview.apk is Cromite's SystemWebView
+v138.0.7204.97 (https://github.com/uazo/cromite/releases, tag
+v138.0.7204.97-418943de425329115e0783375c12ee5aec36e2b6, asset arm64_SystemWebView.apk).
+138 is the newest Cromite release with minSdk 26; v140+ needs Android 10.
+Package name is com.android.webview, so no config_webview_packages change is needed.
+Re-download that asset to restore it after a fresh `repo sync`.
