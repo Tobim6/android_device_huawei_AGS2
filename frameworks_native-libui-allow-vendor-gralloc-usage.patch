@@ -1,0 +1,19 @@
+diff --git a/libs/ui/Gralloc2.cpp b/libs/ui/Gralloc2.cpp
+index 918251f..b25569e 100644
+--- a/libs/ui/Gralloc2.cpp
++++ b/libs/ui/Gralloc2.cpp
+@@ -95,10 +95,12 @@ Gralloc2::Error Mapper::validateBufferDescriptorInfo(
+         validUsageBits = validUsageBits | getValid11UsageBits();
+     }
+ 
++    // AGS2: the Huawei camera HAL requests streams with vendor-private gralloc usage bits
++    // (0x2080000) that Android 9 does not know about. The vendor gralloc understands them, so
++    // let them through instead of failing every camera buffer allocation.
+     if (descriptorInfo.usage & ~validUsageBits) {
+-        ALOGE("buffer descriptor contains invalid usage bits 0x%" PRIx64,
++        ALOGV("buffer descriptor contains vendor usage bits 0x%" PRIx64,
+               descriptorInfo.usage & ~validUsageBits);
+-        return Error::BAD_VALUE;
+     }
+     return Error::NONE;
+ }

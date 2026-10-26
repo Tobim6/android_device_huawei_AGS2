@@ -1,0 +1,77 @@
+diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
+index 550be4a..3bfb937 100644
+--- a/services/camera/libcameraservice/CameraService.cpp
++++ b/services/camera/libcameraservice/CameraService.cpp
+@@ -122,6 +122,12 @@ CameraService::CameraService() :
+     mServiceLockWrapper = std::make_shared<WaitableMutexWrapper>(&mServiceLock);
+ }
+ 
++// AGS2: the Huawei camera provider reports device status from inside getVendorTags(), i.e. nested
++// on the thread that is in enumerateProviders() holding mServiceLock. Handling it there deadlocks
++// (updateCameraNumAndIds() takes mServiceLock) or touches state that does not exist yet. The devices
++// are added by enumerateProviders() itself once the vendor tags are set up, so drop such callbacks.
++static thread_local bool sSettingUpVendorTags = false;
++
+ void CameraService::onFirstRef()
+ {
+     ALOGI("CameraService process starting");
+@@ -167,7 +173,9 @@ status_t CameraService::enumerateProviders() {
+         // Setup vendor tags before we call get_camera_info the first time
+         // because HAL might need to setup static vendor keys in get_camera_info
+         // TODO: maybe put this into CameraProviderManager::initialize()?
++        sSettingUpVendorTags = true;
+         mCameraProviderManager->setUpVendorTags();
++        sSettingUpVendorTags = false;
+ 
+         if (nullptr == mFlashlight.get()) {
+             mFlashlight = new CameraFlashlight(mCameraProviderManager, this);
+@@ -273,6 +281,12 @@ void CameraService::onDeviceStatusChanged(const String8& id,
+     ALOGI("%s: Status changed for cameraId=%s, newStatus=%d", __FUNCTION__,
+             id.string(), newHalStatus);
+ 
++    if (sSettingUpVendorTags) {
++        ALOGW("%s: ignoring status change of camera %s reported while setting up vendor tags",
++                __FUNCTION__, id.string());
++        return;
++    }
++
+     StatusInternal newStatus = mapToInternal(newHalStatus);
+ 
+     std::shared_ptr<CameraState> state = getCameraState(id);
+diff --git a/services/camera/libcameraservice/api1/Camera2Client.cpp b/services/camera/libcameraservice/api1/Camera2Client.cpp
+index d59b313..d37ba66 100644
+--- a/services/camera/libcameraservice/api1/Camera2Client.cpp
++++ b/services/camera/libcameraservice/api1/Camera2Client.cpp
+@@ -967,14 +967,9 @@ void Camera2Client::stopPreviewL() {
+                         __FUNCTION__, mCameraId, strerror(-res), res);
+             }
+ 
+-            // Flush all in-process captures and buffer in order to stop
+-            // preview faster.
+-            res = mDevice->flush();
+-            if (res != OK) {
+-                ALOGE("%s: Camera %d: Unable to flush pending requests: %s (%d)",
+-                        __FUNCTION__, mCameraId, strerror(-res), res);
+-            }
+-
++            // AGS2: the Huawei camera HAL drops the result metadata of in-flight requests when it is
++            // flushed, so waitUntilDrained() would time out. Let the pipeline drain by itself (the
++            // Android 8 behaviour) instead of flushing it.
+             res = mDevice->waitUntilDrained();
+             if (res != OK) {
+                 ALOGE("%s: Camera %d: Waiting to stop streaming failed: %s (%d)",
+@@ -1995,12 +1990,8 @@ status_t Camera2Client::createJpegStreamL(Parameters &params) {
+         return res;
+     }
+ 
+-    res = mDevice->flush();
+-    if (res != OK) {
+-        ALOGE("%s: Camera %d: Unable flush device: %s (%d)",
+-                __FUNCTION__, mCameraId, strerror(-res), res);
+-        return res;
+-    }
++    // AGS2: no mDevice->flush() here, the Huawei camera HAL loses the results of flushed requests and
++    // waitUntilDrained() would then never complete; draining naturally works (Android 8 behaviour).
+ 
+     // Ideally we don't need this, but current camera device
+     // status tracking mechanism demands it.
