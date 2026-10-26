@@ -60,3 +60,12 @@ $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
 # would run xmllint on it because of the .xml extension and fail the build)
 PRODUCT_COPY_FILES += \
     device/huawei/AGS2/rootdir/res/keys:root/res/keys
+
+# Release signing: point AGS2_SIGNING_KEYS_DIR at a directory with releasekey.{pk8,x509.pem}
+# (e.g. AGS2_SIGNING_KEYS_DIR=/path/to/keys/z3s mka bacon). Without it the AOSP test keys are used.
+ifneq ($(AGS2_SIGNING_KEYS_DIR),)
+ifneq ($(wildcard $(AGS2_SIGNING_KEYS_DIR)/releasekey.pk8),)
+PRODUCT_DEFAULT_DEV_CERTIFICATE := $(AGS2_SIGNING_KEYS_DIR)/releasekey
+PRODUCT_EXTRA_RECOVERY_KEYS := $(AGS2_SIGNING_KEYS_DIR)/releasekey
+endif
+endif
