@@ -1,0 +1,12 @@
+--- a/Android.mk	2026-10-27 21:44:11.891272121 +0100
++++ b/Android.mk	2026-10-27 21:44:11.906272158 +0100
+@@ -22,7 +22,8 @@
+ 
+ LOCAL_MODULE := webview
+ LOCAL_MODULE_CLASS := APPS
+-LOCAL_PRODUCT_MODULE := true
++# AGS2: install to /system/app/webview. This device mounts the (small) stock EMUI product partition at /product and hides
++# /product/app, and the OTA never flashed product.img, so a product module never reached the device.
+ LOCAL_MULTILIB := both
+ LOCAL_CERTIFICATE := $(DEFAULT_SYSTEM_DEV_CERTIFICATE)
+ LOCAL_REQUIRED_MODULES := \

@@ -4,3 +4,8 @@ v138.0.7204.97-418943de425329115e0783375c12ee5aec36e2b6, asset arm64_SystemWebVi
 138 is the newest Cromite release with minSdk 26; v140+ needs Android 10.
 Package name is com.android.webview, so no config_webview_packages change is needed.
 Re-download that asset to restore it after a fresh `repo sync`.
+
+The upstream external/chromium-webview module is a *product* module (LOCAL_PRODUCT_MODULE). On this device that never reaches the tablet:
+the OTA does not flash product.img, the stock EMUI product partition is too small for Cromite (~275 MB) and init bind-mounts an empty
+dir over /product/app. Apply webview/chromium-webview-system.patch to external/chromium-webview (drops LOCAL_PRODUCT_MODULE) so the
+APK is installed to /system/app/webview and ships in system.img.
