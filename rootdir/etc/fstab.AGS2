@@ -5,9 +5,6 @@
 /dev/block/bootdevice/by-name/kernel    /boot      emmc    defaults    recoveryonly
 /dev/block/bootdevice/by-name/system    /system    ext4    ro    wait,avb
 /dev/block/bootdevice/by-name/vendor    /vendor    ext4    ro    wait,avb
-/dev/block/bootdevice/by-name/product   /product   ext4    ro    wait
-/dev/block/bootdevice/by-name/version   /version   ext4    ro    wait
-/dev/block/bootdevice/by-name/cust      /cust      ext4    ro    wait
 /dev/block/bootdevice/by-name/odm      /odm      ext4    ro    wait
 /dev/block/bootdevice/by-name/patch     /patch_hw  ext4    ro    wait,verify
 /dev/block/bootdevice/by-name/splash2    /splash2   ext4     rw,nosuid,nodev,noatime,data=ordered,context=u:object_r:splash2_data_file:s0 wait,check

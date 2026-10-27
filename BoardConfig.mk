@@ -98,8 +98,12 @@ BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x07b88000 -
 # directly from the stock HarmonyOS 2.0 (build 102.0.0.040) firmware dump
 # for this exact device, overriding the hi6250-common defaults which were
 # sized for a different (phone) device sharing the same SoC.
-BOARD_SYSTEMIMAGE_PARTITION_SIZE := 2441084928
-BOARD_VENDORIMAGE_PARTITION_SIZE := 549453824
+# system/vendor are NOT fixed size any more: the install zip repartitions the eMMC (repartition/repartition.sh) and the images are sized by
+# their content plus these reserves (PRODUCT_USE_DYNAMIC_PARTITION_SIZE in device.mk): 300 MiB for GApps on system, 50 MiB on vendor.
+BOARD_SYSTEMIMAGE_PARTITION_SIZE :=
+BOARD_VENDORIMAGE_PARTITION_SIZE :=
+BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 314572800
+BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 52428800
 BOARD_PRODUCTIMAGE_PARTITION_SIZE := 1132462080
 BOARD_ODMIMAGE_PARTITION_SIZE := 134217728
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4

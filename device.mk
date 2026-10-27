@@ -61,6 +61,14 @@ $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
 PRODUCT_COPY_FILES += \
     device/huawei/AGS2/rootdir/res/keys:root/res/keys
 
+# The install zip repartitions the eMMC from "preas" on (see repartition/repartition.sh): system = filesystem used space + 300 MiB for GApps,
+# vendor = used space + 50 MiB, userdata = the rest. The images therefore must be sized by their content (dynamic partition size, reserve
+# set in BoardConfig.mk) and the zip needs the script and a static parted (verified build supplied by the maintainer) in install/bin.
+PRODUCT_USE_DYNAMIC_PARTITION_SIZE := true
+PRODUCT_COPY_FILES += \
+    device/huawei/AGS2/repartition/parted:install/bin/parted \
+    device/huawei/AGS2/repartition/repartition.sh:install/bin/repartition.sh
+
 # Release signing: point AGS2_SIGNING_KEYS_DIR at a directory with releasekey.{pk8,x509.pem}
 # (e.g. AGS2_SIGNING_KEYS_DIR=/path/to/keys/z3s mka bacon). Without it the AOSP test keys are used.
 ifneq ($(AGS2_SIGNING_KEYS_DIR),)
