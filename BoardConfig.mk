@@ -99,11 +99,14 @@ BOARD_MKBOOTIMG_ARGS += --kernel_offset 0x00008000 --ramdisk_offset 0x07b88000 -
 # for this exact device, overriding the hi6250-common defaults which were
 # sized for a different (phone) device sharing the same SoC.
 # system/vendor are NOT fixed size any more: the install zip repartitions the eMMC (repartition/repartition.sh) and the images are sized by
-# their content plus these reserves (PRODUCT_USE_DYNAMIC_PARTITION_SIZE in device.mk): 300 MiB for GApps on system, 50 MiB on vendor.
+# their content plus these reserves (PRODUCT_USE_DYNAMIC_PARTITION_SIZE in device.mk). The goal is FREE space after install of 300 MiB
+# (GApps) on system and 50 MiB on vendor. The build sizes an image as "tree size + reserve", but its tree size is ~87 MiB above the real
+# ext4 usage for system and ~8 MiB below it for vendor (metadata), so the reserves are corrected by that: measured on the 2026-10-27 build
+# (system used 1542.5 MiB, vendor 446.6 MiB) 214/59 MiB give ~300/~51 MiB free. Re-measure (README in repartition/) if the content changes a lot.
 BOARD_SYSTEMIMAGE_PARTITION_SIZE :=
 BOARD_VENDORIMAGE_PARTITION_SIZE :=
-BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 314572800
-BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 52428800
+BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 224395264
+BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 61865984
 BOARD_PRODUCTIMAGE_PARTITION_SIZE := 1132462080
 BOARD_ODMIMAGE_PARTITION_SIZE := 134217728
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4

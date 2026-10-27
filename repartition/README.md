@@ -49,3 +49,9 @@ Rollback of the partition table (contents of the old partitions are NOT restored
 ## Tests
 `test/run_tests.sh` builds disk images from the tablet's real primary GPT (`test/primary_gpt_real.bin`) and runs the script with the shipped
 parted through `qemu-aarch64-static`: stock table, repartition, skip, abort on every mismatch, rollback (25 checks).
+
+## Measuring the reserves
+After a build, free space on the real filesystems: extract `IMAGES/system.img`/`vendor.img` from
+`out/target/product/AGS2/obj/PACKAGING/target_files_intermediates/*.zip`, `simg2img` them and read `dumpe2fs -h` (Block count - Free blocks).
+Target: system free ~300 MiB, vendor free ~50 MiB. 2026-10-27 build with reserves 300/50 MiB gave 387/42 MiB free (system image 1930 MiB,
+vendor 489 MiB), so the reserves in BoardConfig.mk were corrected to 214/59 MiB.
