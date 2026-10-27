@@ -49,6 +49,44 @@ disk_sectors() { table | awk -F: 'NR==2 { v=$2; sub(/s$/,"",v); print v }'; }
 numbers() { table | awk -F: '$1 ~ /^[0-9]+$/ { print $1 }'; }
 last_number() { numbers | sort -n | tail -1; }
 
+# Partitions that parted adds to the running kernel have no PARTNAME (parted's BLKPG call does not pass the GPT name), so ueventd cannot
+# create the by-name links for them; only a full re-read of the table would, and that needs every partition of the disk unmounted. Make the
+# links ourselves, but only for partitions the kernel really has at the planned place. A later boot reads the GPT and names them itself.
+ensure_links() {
+  [ "$TEST" = 1 ] && return 0
+  dir=$(readlink -f "$BYNAME")
+  [ -d "$dir" ] || fail "$BYNAME is not a directory"
+  for n in 52:system 53:vendor 54:userdata; do
+    num=${n%%:*}; name=${n##*:}
+    want="${DISK}p$num"
+    [ -b "$want" ] || fail "$want does not exist (the kernel does not know the new table). Reboot recovery and install again."
+    if [ "$(readlink -f "$dir/$name" 2>/dev/null)" != "$want" ]; then
+      rm -f "$dir/$name"
+      ln -s "$want" "$dir/$name" || fail "cannot create $dir/$name"
+      say "linked $dir/$name -> $want"
+    fi
+  done
+  KS=$(cat "/sys/block/${DISK##*/}/${DISK##*/}p52/start" 2>/dev/null)
+  [ "$KS" = "$(part 52 2)" ] || fail "the kernel sees system at ${KS:-?}, the table says $(part 52 2). Reboot recovery and install again."
+}
+
+# userdata: f2fs, android feature set, WITHOUT extra_attr/project_quota (this 4.4 kernel panics on those)
+format_userdata() {
+  MKF=$(command -v make_f2fs || ls /system/bin/make_f2fs /sbin/make_f2fs 2>/dev/null | head -1)
+  if [ -n "$MKF" ]; then
+    "$MKF" -g android "$BYNAME/userdata" >/dev/null 2>&1 && say "userdata formatted (f2fs)" || say "WARNING: formatting userdata failed; format Data in TWRP"
+  else
+    say "WARNING: make_f2fs not found; format Data in TWRP (Wipe -> Format Data)"
+  fi
+}
+# a freshly (re)partitioned userdata has no filesystem yet; one that has an f2fs superblock (magic F2F52010 at 0x400) is left alone
+ensure_userdata_fs() {
+  [ "$TEST" = 1 ] && return 0
+  m=$(dd if="$BYNAME/userdata" bs=1 skip=1024 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n')
+  [ "$m" = "1020f5f2" ] && { say "userdata already has an f2fs filesystem, left alone"; return 0; }
+  format_userdata
+}
+
 TABLE_BEFORE=$(table)
 [ -n "$TABLE_BEFORE" ] || fail "cannot read the partition table of $DISK"
 DISK_SECTORS=$(disk_sectors)
@@ -70,10 +108,14 @@ if [ "$(last_number)" = "54" ] && [ "$(part 52 6)" = "system" ] && [ "$(part 53 
   HAVE_SYS=$(part 52 4); HAVE_VEN=$(part 53 4)
   if [ "$HAVE_SYS" = "$((SYS_MIB * SPM))" ] && [ "$HAVE_VEN" = "$((VEN_MIB * SPM))" ] && [ "$(part 54 3)" = "$USR_E" ]; then
     say "the partition table already matches the target (system $SYS_MIB MiB, vendor $VEN_MIB MiB, userdata the rest): not repartitioning"
+    ensure_links
+    ensure_userdata_fs
     exit 0
   fi
   if [ "$HAVE_SYS" -ge $((SYS_MIB * SPM)) ] && [ "$HAVE_VEN" -ge $((VEN_MIB * SPM)) ]; then
     say "already repartitioned (system $((HAVE_SYS / SPM)) MiB, vendor $((HAVE_VEN / SPM)) MiB); both are large enough for this zip: not repartitioning"
+    ensure_links
+    ensure_userdata_fs
     exit 0
   fi
   fail "already repartitioned, but system/vendor ($((HAVE_SYS / SPM))/$((HAVE_VEN / SPM)) MiB) are smaller than this zip needs ($SYS_MIB/$VEN_MIB MiB). Nothing was changed."
@@ -150,26 +192,9 @@ check 52 system "$SYS_S" "$SYS_E" && check 53 vendor "$VEN_S" "$VEN_E" && check 
 say "new table verified; partitions 1..51 are unchanged"
 
 if [ "$TEST" != 1 ]; then
-  # the kernel is told by parted (BLKPG); make sure the device nodes and by-name links really are there
-  for n in 52:system 53:vendor 54:userdata; do
-    num=${n%%:*}; name=${n##*:}
-    i=0
-    while [ "$(readlink -f "$BYNAME/$name" 2>/dev/null)" != "${DISK}p$num" ] && [ $i -lt 15 ]; do
-      [ $i -eq 3 ] && echo add > "/sys/block/${DISK##*/}/${DISK##*/}p$num/uevent" 2>/dev/null
-      sleep 1; i=$((i + 1))
-    done
-    [ "$(readlink -f "$BYNAME/$name" 2>/dev/null)" = "${DISK}p$num" ] || fail "$BYNAME/$name does not point to ${DISK}p$num (kernel still has the old table?). Reboot recovery and install again: the table on disk is already the new one."
-  done
-  KS=$(cat /sys/block/${DISK##*/}/${DISK##*/}p52/start)
-  [ "$KS" = "$SYS_S" ] || fail "the kernel sees system at $KS, expected $SYS_S. Reboot recovery and install again."
+  ensure_links
 
-  # userdata: f2fs, android feature set, WITHOUT extra_attr/project_quota (this 4.4 kernel panics on those)
-  MKF=$(command -v make_f2fs || ls /system/bin/make_f2fs /sbin/make_f2fs 2>/dev/null | head -1)
-  if [ -n "$MKF" ]; then
-    "$MKF" -g android "$BYNAME/userdata" >/dev/null 2>&1 && say "userdata formatted (f2fs)" || say "WARNING: formatting userdata failed; format Data in TWRP"
-  else
-    say "WARNING: make_f2fs not found; format Data in TWRP (Wipe -> Format Data)"
-  fi
+  format_userdata
 fi
 say "repartition done"
 exit 0
