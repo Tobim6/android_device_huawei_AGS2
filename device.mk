@@ -53,6 +53,9 @@ PRODUCT_PACKAGES += \
 # Inherit from hi6250-common
 $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
 
+# Dalvik heap for a 10" xhdpi tablet with 2 GB RAM (without this apps get ART's 16 MB default limit)
+$(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-heap.mk)
+
 # TEEOS native-CA whitelist + keys that stock EMUI8 ships in the ramdisk. teecd pushes
 # /res/native_packages.xml (alongside /system/etc and /vendor/etc copies) to TEEOS via
 # TC_NS_set_nativeCA_hash; without all lists TEEOS rejects TA sessions.
