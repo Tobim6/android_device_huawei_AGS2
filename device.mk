@@ -53,6 +53,14 @@ PRODUCT_PACKAGES += \
 # Inherit from hi6250-common
 $(call inherit-product, device/huawei/hi6250-common/hi6250.mk)
 
+# The stock vendor audio policy (vendor/etc/audio_policy_configuration.xml) xi:includes its
+# module configs from /vendor/etc, but the proprietary modules install them to /system/etc only.
+# Without them the A2DP (Bluetooth audio), USB and r_submix modules fail to load.
+PRODUCT_COPY_FILES += \
+    vendor/huawei/AGS2/proprietary/etc/a2dp_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_audio_policy_configuration.xml \
+    vendor/huawei/AGS2/proprietary/etc/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
+    vendor/huawei/AGS2/proprietary/etc/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml
+
 # Dalvik heap for a 10" xhdpi tablet with 2 GB RAM (without this apps get ART's 16 MB default limit)
 $(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-heap.mk)
 
