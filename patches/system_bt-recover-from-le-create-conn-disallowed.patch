@@ -1,0 +1,20 @@
+diff --git a/stack/btm/btm_ble.cc b/stack/btm/btm_ble.cc
+index 8269928..a06ee6e 100644
+--- a/stack/btm/btm_ble.cc
++++ b/stack/btm/btm_ble.cc
+@@ -2029,9 +2029,12 @@ void btm_ble_create_ll_conn_complete(uint8_t status) {
+   if (status == HCI_ERR_COMMAND_DISALLOWED) {
+     /* There is already either direct connect, or whitelist connection
+      * pending, but we don't know which one, or to which state should we
+-     * transition now. This can be triggered only in case of rare race
+-     * condition. Crash to recover. */
+-    LOG(FATAL) << "LE Create Connection - command disallowed";
++     * transition now. AOSP crashes the whole stack to recover; Quick Share
++     * (Play services) triggers this race routinely, so instead cancel whatever
++     * is pending in the controller: the connection state was already reset to
++     * idle above and the mode update re-issues the connection attempts. */
++    LOG(ERROR) << "LE Create Connection - command disallowed, cancelling the pending attempt";
++    btsnd_hcic_ble_create_conn_cancel();
+   }
+ }
+ /*****************************************************************************
