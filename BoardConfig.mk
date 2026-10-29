@@ -62,7 +62,7 @@ TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/etc/fstab.AGS2
 # related device) both have:
 #   - coherent_pool=512K / slub_min_objects=12 -- memory tuning params
 #     present in the stock KERNEL.img cmdline for this exact device.
-#   - androidboot.selinux=permissive -- without this, SELinux defaults
+#   - -- without this, SELinux defaults
 #     to enforcing; this device tree's sepolicy is almost certainly
 #     incomplete for all the proprietary HALs/services pulled in from
 #     the stock vendor blobs, and an early SELinux denial killing a
@@ -70,7 +70,7 @@ TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/etc/fstab.AGS2
 #     output at all, since nothing gets far enough to redraw the
 #     screen past the bootloader's last frame) -- a well-known class of
 #     custom-ROM bring-up failure, not something dmesg/pstore catches.
-BOARD_KERNEL_CMDLINE := loglevel=4 coherent_pool=512K page_tracker=on slub_min_objects=12 unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538 androidboot.selinux=permissive
+BOARD_KERNEL_CMDLINE := loglevel=4 coherent_pool=512K page_tracker=on slub_min_objects=12 unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538
 
 # This device has no "boot" partition at all -- confirmed from the stock
 # firmware's own partition list, it uses a dedicated "KERNEL" partition
