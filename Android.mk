@@ -34,9 +34,9 @@ ALL_DEFAULT_INSTALLED_MODULES += $(AGS2_NATIVE_PACKAGES)
 # (flashed by releasetools.py FullOTA_InstallEnd).
 AGS2_DEVICE_PATH := $(LOCAL_PATH)
 AGS2_RAMDISK_P31 := $(PRODUCT_OUT)/ramdisk_p31.img
-$(AGS2_RAMDISK_P31): $(INSTALLED_RAMDISK_TARGET) $(MKBOOTIMG) $(AGS2_DEVICE_PATH)/tools/wrap_ramdisk.py $(AGS2_DEVICE_PATH)/prebuilt/ramdisk_p31_header.bin
+$(AGS2_RAMDISK_P31): $(PRODUCT_OUT)/ramdisk.img $(MKBOOTIMG) $(AGS2_DEVICE_PATH)/tools/wrap_ramdisk.py $(AGS2_DEVICE_PATH)/prebuilt/ramdisk_p31_header.bin
 	@echo "Target ramdisk partition image: $@"
-	$(hide) python3 $(AGS2_DEVICE_PATH)/tools/wrap_ramdisk.py $(MKBOOTIMG) $(INSTALLED_RAMDISK_TARGET) $(AGS2_DEVICE_PATH)/prebuilt/ramdisk_p31_header.bin $@
+	$(hide) python3 $(AGS2_DEVICE_PATH)/tools/wrap_ramdisk.py $(MKBOOTIMG) $(PRODUCT_OUT)/ramdisk.img $(AGS2_DEVICE_PATH)/prebuilt/ramdisk_p31_header.bin $@
 INSTALLED_RADIOIMAGE_TARGET += $(AGS2_RAMDISK_P31)
 
 # TWRP (built separately, see twrp_device_huawei_AGS2) goes into recovery_ramdisk (mmcblk0p32); it borrows the kernel partition.

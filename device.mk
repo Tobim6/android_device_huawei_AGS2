@@ -80,11 +80,14 @@ PRODUCT_COPY_FILES += \
     device/huawei/AGS2/repartition/parted:install/bin/parted \
     device/huawei/AGS2/repartition/repartition.sh:install/bin/repartition.sh
 
-# Release signing: point AGS2_SIGNING_KEYS_DIR at a directory with releasekey.{pk8,x509.pem}
-# (e.g. AGS2_SIGNING_KEYS_DIR=/path/to/keys/z3s mka bacon). Without it the AOSP test keys are used.
-ifneq ($(AGS2_SIGNING_KEYS_DIR),)
-ifneq ($(wildcard $(AGS2_SIGNING_KEYS_DIR)/releasekey.pk8),)
-PRODUCT_DEFAULT_DEV_CERTIFICATE := $(AGS2_SIGNING_KEYS_DIR)/releasekey
-PRODUCT_EXTRA_RECOVERY_KEYS := $(AGS2_SIGNING_KEYS_DIR)/releasekey
+# Release signing: vendor/ags2-keys/tobim6 must hold releasekey, platform, shared, media, networkstack, bluetooth, nfc, ... .{pk8,x509.pem}
+# (the app keys named in LOCAL_CERTIFICATE resolve next to the default release key). The private keys are NOT part of any repo:
+# generate them with openssl (CN=Tobim6) and symlink the directory to vendor/ags2-keys/tobim6. Without them the AOSP test keys are used
+# and the build says so; work/build_bacon_final.sh refuses to build unsigned.
+ifneq ($(wildcard vendor/ags2-keys/tobim6/releasekey.pk8),)
+PRODUCT_DEFAULT_DEV_CERTIFICATE := vendor/ags2-keys/tobim6/releasekey
+PRODUCT_EXTRA_RECOVERY_KEYS := vendor/ags2-keys/tobim6/releasekey
+else
+$(warning AGS2: vendor/ags2-keys/tobim6 not found, signing with the AOSP test keys)
 endif
-endif
+
